@@ -3,22 +3,22 @@ export const galleryContent = {
   githubUrl: "https://github.com/adomaskn",
   pictures: [
     {
-      image: "/img/wall_1.jpg",
+      image: "img/wall_1.jpg",
       link: "https://en.wikipedia.org/wiki/Art_gallery",
       prompt: "Press E to Open Artwork Link",
     },
     {
-      image: "/img/wall_2.jpg",
+      image: "img/wall_2.jpg",
       link: "https://en.wikipedia.org/wiki/Painting",
       prompt: "Press E to Open Artwork Link",
     },
     {
-      image: "/img/wall_3.jpg",
+      image: "img/wall_3.jpg",
       link: "https://en.wikipedia.org/wiki/Modern_art",
       prompt: "Press E to Open Artwork Link",
     },
     {
-      image: "/img/wall_4.jpg",
+      image: "img/wall_4.jpg",
       link: "https://en.wikipedia.org/wiki/Sculpture",
       prompt: "Press E to Open Artwork Link",
     },
