@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { PointerLockControls, Text, useTexture } from "@react-three/drei";
 import { Physics, useBox, usePlane, useSphere } from "@react-three/cannon";
@@ -13,10 +13,121 @@ const GITHUB_URL = galleryContent.githubUrl;
 const APP_MODE = (import.meta.env.VITE_APP_MODE ?? "full").toLowerCase();
 const PROFILE_APP_URL = homeContent.profileAppUrl;
 const ROOM_APP_URL = homeContent.roomAppUrl;
+const LANG_STORAGE_KEY = "vg_lang";
 
-function navigateTo(url, fallback) {
+const textByLanguage = {
+  en: {
+    languageButton: "LT",
+    languageAria: "Switch language to Lithuanian",
+    badgeTitle: "E-Gallery",
+    wallTitle: "E-Gallery",
+    lockPointer: "Lock Pointer",
+    unlockPointer: "Unlock Pointer",
+    switchToThird: "Switch to Third Person",
+    switchToFirst: "Switch to First Person",
+    lockHint: "Click Lock Pointer to Look Around",
+    pressEOpenArtwork: "Press E to Open Artwork Link",
+    pressEGoHome: "Press E to Go Home",
+    tapInteractArtwork: "Tap Interact to Open Artwork Link",
+    tapInteractHome: "Tap Interact to Go Home",
+    mobileHint: "Left thumb: move. Right thumb: look.",
+    jump: "Jump",
+    interact: "Interact",
+    findTarget: "Find Target",
+    aboutHeading: "About Me",
+    interestsHeading: "My Interests",
+    featuredHeading: "Featured Project",
+    contactHeading: "Contact",
+    locationLabel: "Location",
+    role: "Developer and Builder",
+    heroTitle: "Hey, I'm Adomas Knyva.",
+    intro:
+      "I'm a mathematician / software developer / data analyst who aims to contribute positively to the natural world.",
+    details:
+      "Personal portfolio and playground for public projects, experiments, and interactive web ideas.",
+    profileImageCaption: "Find more pictures of me here",
+    aboutPreUniTitle: "Pre-Uni days",
+    aboutUniTitle: "Uni days",
+    featuredTitle: "E-Gallery",
+    featuredSubtitle: "Interactive 3D Gallery",
+    featuredSummary:
+      "A first- and third-person web gallery built with React Three Fiber, physics movement, in-world interactions, and configurable artwork links.",
+    featuredCta: "Open Project",
+  },
+  lt: {
+    languageButton: "EN",
+    languageAria: "Pakeisti kalba i anglu",
+    badgeTitle: "E-Galerija",
+    wallTitle: "E-Galerija",
+    lockPointer: "Uzrakinti ziurejima",
+    unlockPointer: "Atrakinti ziurejima",
+    switchToThird: "Perjungti i trecia asmeni",
+    switchToFirst: "Perjungti i pirma asmeni",
+    lockHint: "Spausk Lock, kad galetum dairytis",
+    pressEOpenArtwork: "Spausk E, kad atidarytum meno nuoroda",
+    pressEGoHome: "Spausk E, kad griztum i pradzia",
+    tapInteractArtwork: "Spausk Interact, kad atidarytum meno nuoroda",
+    tapInteractHome: "Spausk Interact, kad griztum i pradzia",
+    mobileHint: "Kaire ranka: judek. Desine ranka: dairykis.",
+    jump: "Sokti",
+    interact: "Interact",
+    findTarget: "Nera taikinio",
+    aboutHeading: "Apie mane",
+    interestsHeading: "Mano interesai",
+    featuredHeading: "Pagrindinis projektas",
+    contactHeading: "Kontaktai",
+    locationLabel: "Vieta",
+    role: "Kurejas ir programuotojas",
+    heroTitle: "Sveiki, as Adomas Knyva.",
+    intro:
+      "Esu matematikas / programuotojas / duomenu analitikas, siekiantis prisideti prie gamtos geroves.",
+    details:
+      "Asmeninis portfolio ir erdve viesiems projektams, eksperimentams ir interaktyvioms idejoms.",
+    profileImageCaption: "Daugiau mano nuotrauku rasi cia",
+    aboutPreUniTitle: "Iki universiteto",
+    aboutUniTitle: "Universiteto metai",
+    featuredTitle: "E-Galerija",
+    featuredSubtitle: "Interaktyvi 3D galerija",
+    featuredSummary:
+      "Pirmo ir trecio asmens internetine galerija su React Three Fiber, fizikos judejimu ir interaktyviomis nuorodomis.",
+    featuredCta: "Atidaryti projekta",
+  },
+};
+
+function isTouchInputDevice() {
+  if (typeof window === "undefined") return false;
+  return (
+    window.matchMedia?.("(pointer: coarse)")?.matches ||
+    "ontouchstart" in window ||
+    navigator.maxTouchPoints > 0
+  );
+}
+
+function normalizeLanguage(value) {
+  return value === "lt" ? "lt" : "en";
+}
+
+function readLanguageFromUrl() {
+  if (typeof window === "undefined") return null;
+  const url = new URL(window.location.href);
+  const value = url.searchParams.get("lang");
+  if (!value) return null;
+  return normalizeLanguage(value.toLowerCase());
+}
+
+function withLanguageInUrl(url, language) {
+  try {
+    const next = new URL(url, window.location.href);
+    next.searchParams.set("lang", language);
+    return next.toString();
+  } catch {
+    return url;
+  }
+}
+
+function navigateTo(url, fallback, language) {
   if (url && typeof url === "string") {
-    window.location.href = url;
+    window.location.href = withLanguageInUrl(url, language);
     return;
   }
   fallback?.();
@@ -58,7 +169,7 @@ function WallPhysics() {
   return null;
 }
 
-function Room({ pictureRefs, doorRef }) {
+function Room({ pictureRefs, doorRef, wallTitle }) {
   const pictures = useTexture(galleryContent.pictures.map((p) => p.image));
 
   return (
@@ -118,7 +229,7 @@ function Room({ pictureRefs, doorRef }) {
         rotation={[0, -Math.PI / 2, 0]}
       />
 
-      <TextPoster text={galleryContent.wallTitle} position={[0, 0.15, -ROOM_HALF_LENGTH + 0.11]} />
+      <TextPoster text={wallTitle} position={[0, 0.15, -ROOM_HALF_LENGTH + 0.11]} />
 
       <Door ref={doorRef} position={[0, -0.25, ROOM_HALF_LENGTH - 0.11]} rotation={[0, Math.PI, 0]} />
     </group>
@@ -167,11 +278,21 @@ function TextPoster({ text, position }) {
   );
 }
 
-function PlayerCamera({ onKeysChange, playerPosRef, viewMode }) {
+function PlayerCamera({
+  onKeysChange,
+  playerPosRef,
+  viewMode,
+  mobileMoveInput,
+  mobileJumpPressed,
+  touchLookDeltaRef,
+  useTouchLook,
+}) {
   const { camera } = useThree();
   const keys = useRef({ w: false, a: false, s: false, d: false, space: false });
   const velocityRef = useRef([0, 0, 0]);
   const positionRef = useRef([...PLAYER_START]);
+  const yawRef = useRef(0);
+  const pitchRef = useRef(0);
 
   const [ref, api] = useSphere(() => ({
     mass: 1,
@@ -221,6 +342,20 @@ function PlayerCamera({ onKeysChange, playerPosRef, viewMode }) {
   const rotatedOffset = useRef(new Vector3());
 
   useFrame(() => {
+    if (useTouchLook) {
+      const delta = touchLookDeltaRef.current;
+      yawRef.current -= delta.x * 0.0048;
+      pitchRef.current -= delta.y * 0.0039;
+      pitchRef.current = Math.max(-1.18, Math.min(1.18, pitchRef.current));
+      delta.x = 0;
+      delta.y = 0;
+
+      camera.rotation.order = "YXZ";
+      camera.rotation.y = yawRef.current;
+      camera.rotation.x = pitchRef.current;
+      camera.rotation.z = 0;
+    }
+
     if (viewMode === "first") {
       const camX = positionRef.current[0];
       const camY = positionRef.current[1] + 0.35;
@@ -259,8 +394,12 @@ function PlayerCamera({ onKeysChange, playerPosRef, viewMode }) {
     if (keys.current.a) move.current.sub(right.current);
     if (keys.current.d) move.current.add(right.current);
 
+    if (Math.abs(mobileMoveInput.y) > 0.05) move.current.addScaledVector(forward.current, -mobileMoveInput.y);
+    if (Math.abs(mobileMoveInput.x) > 0.05) move.current.addScaledVector(right.current, mobileMoveInput.x);
+
     const canJump = Math.abs(velocityRef.current[1]) < 0.05;
-    const jumpVelocity = keys.current.space && canJump ? 5.5 : velocityRef.current[1];
+    const wantsJump = keys.current.space || mobileJumpPressed;
+    const jumpVelocity = wantsJump && canJump ? 5.5 : velocityRef.current[1];
 
     if (move.current.lengthSq() > 0) {
       move.current.normalize().multiplyScalar(8);
@@ -326,12 +465,19 @@ function InteractionDetector({ interactables, playerPosRef, onInteractableChange
   return null;
 }
 
-function GalleryPage({ onBackHome }) {
+function GalleryPage({ onBackHome, language, onToggleLanguage }) {
   const controlsRef = useRef(null);
+  const t = textByLanguage[language] ?? textByLanguage.en;
   const [locked, setLocked] = useState(false);
+  const [isTouchDevice, setIsTouchDevice] = useState(() => isTouchInputDevice());
   const [pressed, setPressed] = useState({ w: false, a: false, s: false, d: false, space: false });
   const [activeInteractable, setActiveInteractable] = useState(null);
-  const [viewMode, setViewMode] = useState("first");
+  const [viewMode, setViewMode] = useState(() => (isTouchInputDevice() ? "third" : "first"));
+  const [mobileMoveInput, setMobileMoveInput] = useState({ x: 0, y: 0, active: false });
+  const [mobileJumpPressed, setMobileJumpPressed] = useState(false);
+  const [touchLooking, setTouchLooking] = useState(false);
+  const touchLookDeltaRef = useRef({ x: 0, y: 0 });
+  const lastTouchLookPointRef = useRef(null);
 
   const playerPosRef = useRef([...PLAYER_START]);
   const pictureRefs = [useRef(null), useRef(null), useRef(null), useRef(null)];
@@ -339,112 +485,342 @@ function GalleryPage({ onBackHome }) {
 
   const interactables = useMemo(
     () => [
-      { ref: pictureRefs[0], label: galleryContent.pictures[0].prompt, url: galleryContent.pictures[0].link, distance: 2.2, sameTab: false },
-      { ref: pictureRefs[1], label: galleryContent.pictures[1].prompt, url: galleryContent.pictures[1].link, distance: 2.2, sameTab: false },
-      { ref: pictureRefs[2], label: galleryContent.pictures[2].prompt, url: galleryContent.pictures[2].link, distance: 2.2, sameTab: false },
-      { ref: pictureRefs[3], label: galleryContent.pictures[3].prompt, url: galleryContent.pictures[3].link, distance: 2.2, sameTab: false },
-      { ref: doorRef, label: "Press E to Go Home", url: PROFILE_APP_URL, distance: 2.8, sameTab: true },
+      {
+        ref: pictureRefs[0],
+        label: isTouchDevice ? t.tapInteractArtwork : t.pressEOpenArtwork,
+        url: galleryContent.pictures[0].link,
+        distance: 2.2,
+        sameTab: false,
+      },
+      {
+        ref: pictureRefs[1],
+        label: isTouchDevice ? t.tapInteractArtwork : t.pressEOpenArtwork,
+        url: galleryContent.pictures[1].link,
+        distance: 2.2,
+        sameTab: false,
+      },
+      {
+        ref: pictureRefs[2],
+        label: isTouchDevice ? t.tapInteractArtwork : t.pressEOpenArtwork,
+        url: galleryContent.pictures[2].link,
+        distance: 2.2,
+        sameTab: false,
+      },
+      {
+        ref: pictureRefs[3],
+        label: isTouchDevice ? t.tapInteractArtwork : t.pressEOpenArtwork,
+        url: galleryContent.pictures[3].link,
+        distance: 2.2,
+        sameTab: false,
+      },
+      {
+        ref: doorRef,
+        label: isTouchDevice ? t.tapInteractHome : t.pressEGoHome,
+        url: PROFILE_APP_URL,
+        distance: 2.8,
+        sameTab: true,
+      },
     ],
-    []
+    [isTouchDevice, t.tapInteractArtwork, t.pressEOpenArtwork, t.tapInteractHome, t.pressEGoHome]
   );
 
   useEffect(() => {
+    const media = window.matchMedia?.("(pointer: coarse)");
+    const syncDeviceType = () => setIsTouchDevice(isTouchInputDevice());
+    syncDeviceType();
+
+    if (media?.addEventListener) {
+      media.addEventListener("change", syncDeviceType);
+      return () => media.removeEventListener("change", syncDeviceType);
+    }
+    media?.addListener?.(syncDeviceType);
+    return () => media?.removeListener?.(syncDeviceType);
+  }, []);
+
+  useEffect(() => {
+    if (isTouchDevice) {
+      setViewMode("third");
+      if (controlsRef.current) controlsRef.current.unlock();
+      setLocked(false);
+    }
+  }, [isTouchDevice]);
+
+  useEffect(() => {
+    if (!isTouchDevice) return;
+    const clearJump = () => setMobileJumpPressed(false);
+    window.addEventListener("pointerup", clearJump);
+    window.addEventListener("pointercancel", clearJump);
+    return () => {
+      window.removeEventListener("pointerup", clearJump);
+      window.removeEventListener("pointercancel", clearJump);
+    };
+  }, [isTouchDevice]);
+
+  const runInteraction = useCallback(() => {
+    if (!activeInteractable?.url) return;
+    if (activeInteractable.sameTab) {
+      navigateTo(activeInteractable.url, onBackHome, language);
+    } else {
+      window.open(activeInteractable.url, "_blank", "noopener,noreferrer");
+    }
+  }, [activeInteractable, onBackHome, language]);
+
+  useEffect(() => {
     const onKeyDown = (event) => {
-      if (event.key.toLowerCase() === "e" && activeInteractable?.url) {
-        if (activeInteractable.sameTab) {
-          navigateTo(activeInteractable.url, onBackHome);
-        } else {
-          window.open(activeInteractable.url, "_blank", "noopener,noreferrer");
-        }
-      }
+      if (event.key.toLowerCase() === "e") runInteraction();
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [activeInteractable, onBackHome]);
+  }, [runInteraction]);
+
+  const onTouchLookPointerDown = useCallback((event) => {
+    if (!isTouchDevice) return;
+    const xBoundary = window.innerWidth * 0.4;
+    if (event.clientX < xBoundary) return;
+    event.currentTarget.setPointerCapture(event.pointerId);
+    setTouchLooking(true);
+    lastTouchLookPointRef.current = { x: event.clientX, y: event.clientY, pointerId: event.pointerId };
+  }, [isTouchDevice]);
+
+  const onTouchLookPointerMove = useCallback((event) => {
+    if (!isTouchDevice) return;
+    const last = lastTouchLookPointRef.current;
+    if (!last || last.pointerId !== event.pointerId) return;
+    touchLookDeltaRef.current.x += event.clientX - last.x;
+    touchLookDeltaRef.current.y += event.clientY - last.y;
+    lastTouchLookPointRef.current = { x: event.clientX, y: event.clientY, pointerId: event.pointerId };
+  }, [isTouchDevice]);
+
+  const onTouchLookPointerUp = useCallback((event) => {
+    const last = lastTouchLookPointRef.current;
+    if (last?.pointerId !== event.pointerId) return;
+    setTouchLooking(false);
+    lastTouchLookPointRef.current = null;
+  }, []);
 
   return (
     <>
-      <div style={badgeStyle(12, 12)}>E-Galerija</div>
-      <button
-        type="button"
-        onClick={() => {
-          if (!controlsRef.current) return;
-          if (locked) controlsRef.current.unlock();
-          else controlsRef.current.lock();
-        }}
-        style={lockBtnStyle}
-      >
-        {locked ? "Unlock Pointer" : "Lock Pointer"}
-      </button>
+      <div style={badgeStyle(12, 12)}>{t.badgeTitle}</div>
+      <LanguageToggle language={language} onToggle={onToggleLanguage} style={languageBtnStyle(12, 118)} ariaLabel={t.languageAria} />
+      {!isTouchDevice && (
+        <button
+          type="button"
+          onClick={() => {
+            if (!controlsRef.current) return;
+            if (locked) controlsRef.current.unlock();
+            else controlsRef.current.lock();
+          }}
+          style={lockBtnStyle}
+        >
+          {locked ? t.unlockPointer : t.lockPointer}
+        </button>
+      )}
       <button
         type="button"
         onClick={() => setViewMode((m) => (m === "first" ? "third" : "first"))}
-        style={modeBtnStyle}
+        style={modeBtnStyle(isTouchDevice)}
       >
-        {viewMode === "first" ? "Switch to Third Person" : "Switch to First Person"}
+        {viewMode === "first" ? t.switchToThird : t.switchToFirst}
       </button>
 
       <Canvas
         camera={{ position: [0, 0, 0], fov: 90, near: 0.1, far: 100 }}
-        style={{ width: "100vw", height: "100vh", background: "#0f172a" }}
+        style={{ width: "100vw", height: "100dvh", background: "#0f172a", touchAction: "none" }}
         gl={{ antialias: false, alpha: false }}
         onCreated={({ camera }) => camera.lookAt(0, 0, -ROOM_HALF_LENGTH)}
       >
         <Physics gravity={[0, -9.81, 0]}>
           <FloorPhysics />
           <WallPhysics />
-          <Room pictureRefs={pictureRefs} doorRef={doorRef} />
-          <PlayerCamera onKeysChange={setPressed} playerPosRef={playerPosRef} viewMode={viewMode} />
+          <Room pictureRefs={pictureRefs} doorRef={doorRef} wallTitle={t.wallTitle} />
+          <PlayerCamera
+            onKeysChange={setPressed}
+            playerPosRef={playerPosRef}
+            viewMode={viewMode}
+            mobileMoveInput={mobileMoveInput}
+            mobileJumpPressed={mobileJumpPressed}
+            touchLookDeltaRef={touchLookDeltaRef}
+            useTouchLook={isTouchDevice}
+          />
           <InteractionDetector
             interactables={interactables}
             playerPosRef={playerPosRef}
             onInteractableChange={setActiveInteractable}
           />
-          <PointerLockControls ref={controlsRef} onLock={() => setLocked(true)} onUnlock={() => setLocked(false)} />
+          {!isTouchDevice && (
+            <PointerLockControls ref={controlsRef} onLock={() => setLocked(true)} onUnlock={() => setLocked(false)} />
+          )}
         </Physics>
       </Canvas>
 
-      <WASDOverlay pressed={pressed} />
+      {!isTouchDevice && <WASDOverlay pressed={pressed} />}
 
-      {!locked && <div style={centerOverlayStyle}>Click Lock Pointer to Look Around</div>}
+      {!isTouchDevice && !locked && <div style={centerOverlayStyle}>{t.lockHint}</div>}
 
-      {locked && activeInteractable && (
-        <div style={interactionPromptStyle}>{activeInteractable.label}</div>
+      {((!isTouchDevice && locked) || isTouchDevice) && activeInteractable && (
+        <div style={interactionPromptStyle(isTouchDevice)}>{activeInteractable.label}</div>
+      )}
+
+      {isTouchDevice && (
+        <div
+          style={touchLookSurfaceStyle}
+          onPointerDown={onTouchLookPointerDown}
+          onPointerMove={onTouchLookPointerMove}
+          onPointerUp={onTouchLookPointerUp}
+          onPointerCancel={onTouchLookPointerUp}
+        />
+      )}
+
+      {isTouchDevice && (
+        <MobileControls
+          t={t}
+          activeInteractable={activeInteractable}
+          mobileMoveInput={mobileMoveInput}
+          onMoveChange={setMobileMoveInput}
+          mobileJumpPressed={mobileJumpPressed}
+          setMobileJumpPressed={setMobileJumpPressed}
+          onInteract={runInteraction}
+          touchLooking={touchLooking}
+        />
       )}
     </>
   );
 }
 
-function HomePage({ onEnterGallery }) {
+function MobileControls({
+  t,
+  activeInteractable,
+  mobileMoveInput,
+  onMoveChange,
+  mobileJumpPressed,
+  setMobileJumpPressed,
+  onInteract,
+  touchLooking,
+}) {
+  return (
+    <>
+      <div style={mobileHintStyle}>{t.mobileHint}</div>
+      <div style={mobileHudStyle}>
+        <JoystickPad value={mobileMoveInput} onChange={onMoveChange} />
+        <div style={mobileActionColumnStyle}>
+          <button
+            type="button"
+            onPointerDown={() => setMobileJumpPressed(true)}
+            onPointerUp={() => setMobileJumpPressed(false)}
+            onPointerCancel={() => setMobileJumpPressed(false)}
+            style={mobileRoundButtonStyle(mobileJumpPressed)}
+          >
+            {t.jump}
+          </button>
+          <button
+            type="button"
+            onClick={onInteract}
+            disabled={!activeInteractable}
+            style={mobileInteractButtonStyle(Boolean(activeInteractable), touchLooking)}
+          >
+            {activeInteractable ? t.interact : t.findTarget}
+          </button>
+        </div>
+      </div>
+    </>
+  );
+}
+
+function JoystickPad({ value, onChange }) {
+  const padRef = useRef(null);
+  const pointerIdRef = useRef(null);
+  const MAX_RADIUS = 44;
+
+  const setFromPointer = useCallback((clientX, clientY) => {
+    if (!padRef.current) return;
+    const rect = padRef.current.getBoundingClientRect();
+    const centerX = rect.left + rect.width / 2;
+    const centerY = rect.top + rect.height / 2;
+    let dx = clientX - centerX;
+    let dy = clientY - centerY;
+    const distance = Math.hypot(dx, dy);
+    if (distance > MAX_RADIUS) {
+      const ratio = MAX_RADIUS / distance;
+      dx *= ratio;
+      dy *= ratio;
+    }
+    onChange({
+      x: dx / MAX_RADIUS,
+      y: dy / MAX_RADIUS,
+      active: true,
+    });
+  }, [onChange]);
+
+  const reset = useCallback(() => {
+    pointerIdRef.current = null;
+    onChange({ x: 0, y: 0, active: false });
+  }, [onChange]);
+
+  return (
+    <div
+      ref={padRef}
+      style={joystickBaseStyle}
+      onPointerDown={(event) => {
+        pointerIdRef.current = event.pointerId;
+        event.currentTarget.setPointerCapture(event.pointerId);
+        setFromPointer(event.clientX, event.clientY);
+      }}
+      onPointerMove={(event) => {
+        if (pointerIdRef.current !== event.pointerId) return;
+        setFromPointer(event.clientX, event.clientY);
+      }}
+      onPointerUp={(event) => {
+        if (pointerIdRef.current !== event.pointerId) return;
+        reset();
+      }}
+      onPointerCancel={(event) => {
+        if (pointerIdRef.current !== event.pointerId) return;
+        reset();
+      }}
+    >
+      <div
+        style={{
+          ...joystickKnobStyle,
+          transform: `translate(${value.x * MAX_RADIUS}px, ${value.y * MAX_RADIUS}px)`,
+        }}
+      />
+    </div>
+  );
+}
+
+function HomePage({ onEnterGallery, language, onToggleLanguage }) {
+  const t = textByLanguage[language] ?? textByLanguage.en;
+
   return (
     <main style={homeWrapStyle}>
+      <LanguageToggle language={language} onToggle={onToggleLanguage} style={homeLanguageBtnStyle} ariaLabel={t.languageAria} />
       <section style={homeCardStyle}>
         <header style={heroHeaderStyle}>
-          <p style={eyebrowStyle}>{homeContent.role}</p>
-          <h1 style={homeTitleStyle}>{homeContent.heroTitle ?? homeContent.name}</h1>
+          <p style={eyebrowStyle}>{t.role}</p>
+          <h1 style={homeTitleStyle}>{t.heroTitle ?? homeContent.name}</h1>
           {homeContent.profileImage && (
             <a href={homeContent.profileImageLink} target="_blank" rel="noreferrer" style={profileImageLinkStyle}>
               <img src={homeContent.profileImage} alt={homeContent.name} style={profileImageStyle} />
-              <span style={profileCaptionStyle}>{homeContent.profileImageCaption}</span>
+              <span style={profileCaptionStyle}>{t.profileImageCaption}</span>
             </a>
           )}
-          <p style={homeTextStyle}>{homeContent.intro}</p>
-          <p style={homeTextStyle}>{homeContent.details}</p>
+          <p style={homeTextStyle}>{t.intro}</p>
+          <p style={homeTextStyle}>{t.details}</p>
         </header>
 
         {homeContent.aboutSections?.length > 0 && (
           <section style={projectSectionStyle}>
-            <p style={sectionTitleStyle}>About Me</p>
+            <p style={sectionTitleStyle}>{t.aboutHeading}</p>
             <article style={projectCardStyle}>
-              {homeContent.aboutSections.map((section) => (
+              {homeContent.aboutSections.map((section, index) => (
                 <div key={section.title} style={aboutBlockStyle}>
-                  <h3 style={aboutTitleStyle}>{section.title}</h3>
+                  <h3 style={aboutTitleStyle}>{index === 0 ? t.aboutPreUniTitle : index === 1 ? t.aboutUniTitle : section.title}</h3>
                   <p style={homeTextStyle}>{section.text}</p>
                 </div>
               ))}
               {homeContent.interests?.length > 0 && (
                 <>
-                  <h3 style={aboutTitleStyle}>My Interests</h3>
+                  <h3 style={aboutTitleStyle}>{t.interestsHeading}</h3>
                   <ul style={interestListStyle}>
                     {homeContent.interests.map((interest) => (
                       <li key={interest}>{interest}</li>
@@ -457,23 +833,23 @@ function HomePage({ onEnterGallery }) {
         )}
 
         <section style={projectSectionStyle}>
-          <p style={sectionTitleStyle}>Featured Project</p>
+          <p style={sectionTitleStyle}>{t.featuredHeading}</p>
           <article style={projectCardStyle}>
-            <h2 style={projectTitleStyle}>{homeContent.featuredProject.title}</h2>
-            <p style={projectSubStyle}>{homeContent.featuredProject.subtitle}</p>
-            <p style={homeTextStyle}>{homeContent.featuredProject.summary}</p>
+            <h2 style={projectTitleStyle}>{t.featuredTitle}</h2>
+            <p style={projectSubStyle}>{t.featuredSubtitle}</p>
+            <p style={homeTextStyle}>{t.featuredSummary}</p>
             <button
               type="button"
-              onClick={() => navigateTo(ROOM_APP_URL, onEnterGallery)}
+              onClick={() => navigateTo(ROOM_APP_URL, onEnterGallery, language)}
               style={primaryBtnStyle}
             >
-              {homeContent.featuredProject.cta}
+              {t.featuredCta}
             </button>
           </article>
         </section>
 
         <section style={projectSectionStyle}>
-          <p style={sectionTitleStyle}>Contact</p>
+          <p style={sectionTitleStyle}>{t.contactHeading}</p>
           <div style={homeActionsStyle}>
             <a href={`mailto:${homeContent.email}`} style={ghostLinkStyle}>
               {homeContent.email}
@@ -484,7 +860,7 @@ function HomePage({ onEnterGallery }) {
               </a>
             ))}
           </div>
-          <p style={metaTextStyle}>Location: {homeContent.location}</p>
+          <p style={metaTextStyle}>{t.locationLabel}: {homeContent.location}</p>
         </section>
       </section>
     </main>
@@ -493,11 +869,30 @@ function HomePage({ onEnterGallery }) {
 
 export default function App() {
   const [page, setPage] = useState(() => (window.location.hash === "#gallery" ? "gallery" : "home"));
+  const [language, setLanguage] = useState(() => {
+    const fromUrl = readLanguageFromUrl();
+    if (fromUrl) return fromUrl;
+    const saved = window.localStorage.getItem(LANG_STORAGE_KEY);
+    return normalizeLanguage(saved?.toLowerCase());
+  });
 
   useEffect(() => {
     const onHash = () => setPage(window.location.hash === "#gallery" ? "gallery" : "home");
     window.addEventListener("hashchange", onHash);
     return () => window.removeEventListener("hashchange", onHash);
+  }, []);
+
+  useEffect(() => {
+    window.localStorage.setItem(LANG_STORAGE_KEY, language);
+    const currentUrl = new URL(window.location.href);
+    if (currentUrl.searchParams.get("lang") !== language) {
+      currentUrl.searchParams.set("lang", language);
+      window.history.replaceState({}, "", currentUrl.toString());
+    }
+  }, [language]);
+
+  const toggleLanguage = useCallback(() => {
+    setLanguage((current) => (current === "en" ? "lt" : "en"));
   }, []);
 
   const openGallery = () => {
@@ -511,14 +906,18 @@ export default function App() {
   };
 
   if (APP_MODE === "profile") {
-    return <HomePage onEnterGallery={openGallery} />;
+    return <HomePage onEnterGallery={openGallery} language={language} onToggleLanguage={toggleLanguage} />;
   }
 
   if (APP_MODE === "room") {
-    return <GalleryPage onBackHome={openHome} />;
+    return <GalleryPage onBackHome={openHome} language={language} onToggleLanguage={toggleLanguage} />;
   }
 
-  return page === "gallery" ? <GalleryPage onBackHome={openHome} /> : <HomePage onEnterGallery={openGallery} />;
+  return page === "gallery" ? (
+    <GalleryPage onBackHome={openHome} language={language} onToggleLanguage={toggleLanguage} />
+  ) : (
+    <HomePage onEnterGallery={openGallery} language={language} onToggleLanguage={toggleLanguage} />
+  );
 }
 
 function WASDOverlay({ pressed }) {
@@ -556,6 +955,14 @@ function KeyBox({ label, active, col, row, span = 1 }) {
   );
 }
 
+function LanguageToggle({ language, onToggle, style, ariaLabel }) {
+  return (
+    <button type="button" onClick={onToggle} style={style} aria-label={ariaLabel}>
+      {language === "en" ? "LT" : "EN"}
+    </button>
+  );
+}
+
 const badgeStyle = (top, left) => ({
   position: "fixed",
   top,
@@ -568,6 +975,38 @@ const badgeStyle = (top, left) => ({
   fontFamily: "system-ui, sans-serif",
   fontSize: 13,
 });
+
+const languageBtnStyle = (top, left) => ({
+  position: "fixed",
+  top,
+  left,
+  zIndex: 31,
+  border: "1px solid rgba(148, 163, 184, 0.65)",
+  borderRadius: 8,
+  padding: "8px 12px",
+  background: "rgba(17, 24, 39, 0.92)",
+  color: "#fff",
+  fontFamily: "system-ui, sans-serif",
+  fontSize: 13,
+  fontWeight: 700,
+  cursor: "pointer",
+});
+
+const homeLanguageBtnStyle = {
+  position: "fixed",
+  top: 14,
+  right: 14,
+  zIndex: 50,
+  border: "1px solid rgba(148, 163, 184, 0.65)",
+  borderRadius: 8,
+  padding: "8px 12px",
+  background: "rgba(17, 24, 39, 0.92)",
+  color: "#fff",
+  fontFamily: "system-ui, sans-serif",
+  fontSize: 13,
+  fontWeight: 700,
+  cursor: "pointer",
+};
 
 const lockBtnStyle = {
   position: "fixed",
@@ -584,10 +1023,10 @@ const lockBtnStyle = {
   cursor: "pointer",
 };
 
-const modeBtnStyle = {
+const modeBtnStyle = (isTouchDevice) => ({
   position: "fixed",
   top: 12,
-  right: 168,
+  right: isTouchDevice ? 12 : 168,
   zIndex: 30,
   border: "none",
   borderRadius: 8,
@@ -597,7 +1036,7 @@ const modeBtnStyle = {
   fontFamily: "system-ui, sans-serif",
   fontSize: 14,
   cursor: "pointer",
-};
+});
 
 const wasdWrapStyle = {
   position: "fixed",
@@ -626,10 +1065,10 @@ const centerOverlayStyle = {
   zIndex: 20,
 };
 
-const interactionPromptStyle = {
+const interactionPromptStyle = (isTouchDevice) => ({
   position: "fixed",
   left: "50%",
-  bottom: 24,
+  bottom: isTouchDevice ? 150 : 24,
   transform: "translateX(-50%)",
   zIndex: 40,
   padding: "10px 14px",
@@ -637,13 +1076,106 @@ const interactionPromptStyle = {
   background: "rgba(17, 24, 39, 0.92)",
   color: "#fff",
   fontFamily: "system-ui, sans-serif",
-  fontSize: 16,
+  fontSize: isTouchDevice ? 14 : 16,
   letterSpacing: "0.02em",
   border: "1px solid #60a5fa",
+});
+
+const touchLookSurfaceStyle = {
+  position: "fixed",
+  top: 0,
+  right: 0,
+  width: "60vw",
+  height: "100dvh",
+  zIndex: 24,
+  touchAction: "none",
 };
 
+const mobileHintStyle = {
+  position: "fixed",
+  top: 58,
+  left: "50%",
+  transform: "translateX(-50%)",
+  zIndex: 41,
+  borderRadius: 999,
+  padding: "8px 12px",
+  background: "rgba(15, 23, 42, 0.7)",
+  border: "1px solid rgba(147, 197, 253, 0.45)",
+  color: "#e2e8f0",
+  fontFamily: "system-ui, sans-serif",
+  fontSize: 12,
+  letterSpacing: "0.02em",
+  pointerEvents: "none",
+};
+
+const mobileHudStyle = {
+  position: "fixed",
+  left: 14,
+  right: 14,
+  bottom: 14,
+  zIndex: 42,
+  display: "flex",
+  alignItems: "flex-end",
+  justifyContent: "space-between",
+  pointerEvents: "none",
+};
+
+const mobileActionColumnStyle = {
+  display: "flex",
+  flexDirection: "column",
+  gap: 10,
+  alignItems: "flex-end",
+  pointerEvents: "auto",
+};
+
+const joystickBaseStyle = {
+  width: 116,
+  height: 116,
+  borderRadius: "50%",
+  border: "2px solid rgba(148, 163, 184, 0.7)",
+  background: "rgba(2, 6, 23, 0.45)",
+  position: "relative",
+  display: "grid",
+  placeItems: "center",
+  pointerEvents: "auto",
+  touchAction: "none",
+};
+
+const joystickKnobStyle = {
+  width: 56,
+  height: 56,
+  borderRadius: "50%",
+  border: "2px solid rgba(191, 219, 254, 0.9)",
+  background: "rgba(96, 165, 250, 0.35)",
+};
+
+const mobileRoundButtonStyle = (active) => ({
+  width: 72,
+  height: 72,
+  borderRadius: "50%",
+  border: "2px solid rgba(191, 219, 254, 0.9)",
+  background: active ? "rgba(14, 116, 144, 0.85)" : "rgba(15, 23, 42, 0.72)",
+  color: "#fff",
+  fontFamily: "system-ui, sans-serif",
+  fontSize: 14,
+  fontWeight: 700,
+});
+
+const mobileInteractButtonStyle = (enabled, touchLooking) => ({
+  minWidth: 118,
+  borderRadius: 14,
+  border: `2px solid ${enabled ? "#7dd3fc" : "#64748b"}`,
+  background: enabled ? "rgba(2, 132, 199, 0.86)" : "rgba(30, 41, 59, 0.75)",
+  color: "#fff",
+  fontFamily: "system-ui, sans-serif",
+  fontSize: 14,
+  fontWeight: 700,
+  padding: "12px 16px",
+  opacity: touchLooking ? 0.8 : 1,
+});
+
 const homeWrapStyle = {
-  minHeight: "100vh",
+  minHeight: "100dvh",
   display: "grid",
   placeItems: "center",
   background: "linear-gradient(160deg, #0b1222 0%, #1d335a 45%, #2f4f84 100%)",
