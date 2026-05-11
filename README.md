@@ -49,6 +49,24 @@ Desktop controls remain available:
 - `E` to interact
 - Pointer lock button for mouse look
 
+## Language Toggle (EN/LT)
+
+The app now includes an English/Lithuanian toggle on both:
+
+- Main profile/home page
+- 3D gallery room page
+
+Language state persistence:
+
+- Saved in `localStorage` (`vg_lang`)
+- Synced to URL query param (`?lang=en` or `?lang=lt`)
+- Preserved when moving between home/gallery and cross-repo links
+
+Examples:
+
+- `http://localhost:5173/?lang=lt`
+- `http://localhost:5173/?lang=lt#gallery`
+
 ## Local Development
 
 Install dependencies:

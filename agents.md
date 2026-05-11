@@ -37,6 +37,8 @@ The room experience must remain usable on both desktop and mobile.
 4. Avoid broad refactors unless requested.
 5. Document non-obvious decisions in PR descriptions or commit messages.
 6. Keep touch controls and desktop controls both functional when editing room movement/camera logic.
+7. Keep EN/LT language toggle available on both home and room pages.
+8. Preserve language state across navigation (`localStorage` + `?lang=` query sync).
 
 ## Safety and Quality Checklist
 
@@ -51,8 +53,12 @@ Before finalizing work, agents should:
 3. Verify controls:
    - Desktop: `WASD` + `Space` + `E` + pointer lock
    - Mobile: joystick move + right-side swipe look + jump + interact
-4. Confirm no secrets or tokens were introduced.
-5. Keep dependency additions minimal and justified.
+4. Verify localization behavior:
+   - EN/LT toggle appears on both pages
+   - Language does not reset when moving between home/gallery
+   - `?lang=lt` and `?lang=en` initialize expected language
+5. Confirm no secrets or tokens were introduced.
+6. Keep dependency additions minimal and justified.
 
 ## Code Style Expectations
 

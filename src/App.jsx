@@ -13,6 +13,86 @@ const GITHUB_URL = galleryContent.githubUrl;
 const APP_MODE = (import.meta.env.VITE_APP_MODE ?? "full").toLowerCase();
 const PROFILE_APP_URL = homeContent.profileAppUrl;
 const ROOM_APP_URL = homeContent.roomAppUrl;
+const LANG_STORAGE_KEY = "vg_lang";
+
+const textByLanguage = {
+  en: {
+    languageButton: "LT",
+    languageAria: "Switch language to Lithuanian",
+    badgeTitle: "E-Gallery",
+    wallTitle: "E-Gallery",
+    lockPointer: "Lock Pointer",
+    unlockPointer: "Unlock Pointer",
+    switchToThird: "Switch to Third Person",
+    switchToFirst: "Switch to First Person",
+    lockHint: "Click Lock Pointer to Look Around",
+    pressEOpenArtwork: "Press E to Open Artwork Link",
+    pressEGoHome: "Press E to Go Home",
+    tapInteractArtwork: "Tap Interact to Open Artwork Link",
+    tapInteractHome: "Tap Interact to Go Home",
+    mobileHint: "Left thumb: move. Right thumb: look.",
+    jump: "Jump",
+    interact: "Interact",
+    findTarget: "Find Target",
+    aboutHeading: "About Me",
+    interestsHeading: "My Interests",
+    featuredHeading: "Featured Project",
+    contactHeading: "Contact",
+    locationLabel: "Location",
+    role: "Developer and Builder",
+    heroTitle: "Hey, I'm Adomas Knyva.",
+    intro:
+      "I'm a mathematician / software developer / data analyst who aims to contribute positively to the natural world.",
+    details:
+      "Personal portfolio and playground for public projects, experiments, and interactive web ideas.",
+    profileImageCaption: "Find more pictures of me here",
+    aboutPreUniTitle: "Pre-Uni days",
+    aboutUniTitle: "Uni days",
+    featuredTitle: "E-Gallery",
+    featuredSubtitle: "Interactive 3D Gallery",
+    featuredSummary:
+      "A first- and third-person web gallery built with React Three Fiber, physics movement, in-world interactions, and configurable artwork links.",
+    featuredCta: "Open Project",
+  },
+  lt: {
+    languageButton: "EN",
+    languageAria: "Pakeisti kalba i anglu",
+    badgeTitle: "E-Galerija",
+    wallTitle: "E-Galerija",
+    lockPointer: "Uzrakinti ziurejima",
+    unlockPointer: "Atrakinti ziurejima",
+    switchToThird: "Perjungti i trecia asmeni",
+    switchToFirst: "Perjungti i pirma asmeni",
+    lockHint: "Spausk Lock, kad galetum dairytis",
+    pressEOpenArtwork: "Spausk E, kad atidarytum meno nuoroda",
+    pressEGoHome: "Spausk E, kad griztum i pradzia",
+    tapInteractArtwork: "Spausk Interact, kad atidarytum meno nuoroda",
+    tapInteractHome: "Spausk Interact, kad griztum i pradzia",
+    mobileHint: "Kaire ranka: judek. Desine ranka: dairykis.",
+    jump: "Sokti",
+    interact: "Interact",
+    findTarget: "Nera taikinio",
+    aboutHeading: "Apie mane",
+    interestsHeading: "Mano interesai",
+    featuredHeading: "Pagrindinis projektas",
+    contactHeading: "Kontaktai",
+    locationLabel: "Vieta",
+    role: "Kurejas ir programuotojas",
+    heroTitle: "Sveiki, as Adomas Knyva.",
+    intro:
+      "Esu matematikas / programuotojas / duomenu analitikas, siekiantis prisideti prie gamtos geroves.",
+    details:
+      "Asmeninis portfolio ir erdve viesiems projektams, eksperimentams ir interaktyvioms idejoms.",
+    profileImageCaption: "Daugiau mano nuotrauku rasi cia",
+    aboutPreUniTitle: "Iki universiteto",
+    aboutUniTitle: "Universiteto metai",
+    featuredTitle: "E-Galerija",
+    featuredSubtitle: "Interaktyvi 3D galerija",
+    featuredSummary:
+      "Pirmo ir trecio asmens internetine galerija su React Three Fiber, fizikos judejimu ir interaktyviomis nuorodomis.",
+    featuredCta: "Atidaryti projekta",
+  },
+};
 
 function isTouchInputDevice() {
   if (typeof window === "undefined") return false;
@@ -23,9 +103,31 @@ function isTouchInputDevice() {
   );
 }
 
-function navigateTo(url, fallback) {
+function normalizeLanguage(value) {
+  return value === "lt" ? "lt" : "en";
+}
+
+function readLanguageFromUrl() {
+  if (typeof window === "undefined") return null;
+  const url = new URL(window.location.href);
+  const value = url.searchParams.get("lang");
+  if (!value) return null;
+  return normalizeLanguage(value.toLowerCase());
+}
+
+function withLanguageInUrl(url, language) {
+  try {
+    const next = new URL(url, window.location.href);
+    next.searchParams.set("lang", language);
+    return next.toString();
+  } catch {
+    return url;
+  }
+}
+
+function navigateTo(url, fallback, language) {
   if (url && typeof url === "string") {
-    window.location.href = url;
+    window.location.href = withLanguageInUrl(url, language);
     return;
   }
   fallback?.();
@@ -67,7 +169,7 @@ function WallPhysics() {
   return null;
 }
 
-function Room({ pictureRefs, doorRef }) {
+function Room({ pictureRefs, doorRef, wallTitle }) {
   const pictures = useTexture(galleryContent.pictures.map((p) => p.image));
 
   return (
@@ -127,7 +229,7 @@ function Room({ pictureRefs, doorRef }) {
         rotation={[0, -Math.PI / 2, 0]}
       />
 
-      <TextPoster text={galleryContent.wallTitle} position={[0, 0.15, -ROOM_HALF_LENGTH + 0.11]} />
+      <TextPoster text={wallTitle} position={[0, 0.15, -ROOM_HALF_LENGTH + 0.11]} />
 
       <Door ref={doorRef} position={[0, -0.25, ROOM_HALF_LENGTH - 0.11]} rotation={[0, Math.PI, 0]} />
     </group>
@@ -363,8 +465,9 @@ function InteractionDetector({ interactables, playerPosRef, onInteractableChange
   return null;
 }
 
-function GalleryPage({ onBackHome }) {
+function GalleryPage({ onBackHome, language, onToggleLanguage }) {
   const controlsRef = useRef(null);
+  const t = textByLanguage[language] ?? textByLanguage.en;
   const [locked, setLocked] = useState(false);
   const [isTouchDevice, setIsTouchDevice] = useState(() => isTouchInputDevice());
   const [pressed, setPressed] = useState({ w: false, a: false, s: false, d: false, space: false });
@@ -382,13 +485,43 @@ function GalleryPage({ onBackHome }) {
 
   const interactables = useMemo(
     () => [
-      { ref: pictureRefs[0], label: galleryContent.pictures[0].prompt, url: galleryContent.pictures[0].link, distance: 2.2, sameTab: false },
-      { ref: pictureRefs[1], label: galleryContent.pictures[1].prompt, url: galleryContent.pictures[1].link, distance: 2.2, sameTab: false },
-      { ref: pictureRefs[2], label: galleryContent.pictures[2].prompt, url: galleryContent.pictures[2].link, distance: 2.2, sameTab: false },
-      { ref: pictureRefs[3], label: galleryContent.pictures[3].prompt, url: galleryContent.pictures[3].link, distance: 2.2, sameTab: false },
-      { ref: doorRef, label: "Press E to Go Home", url: PROFILE_APP_URL, distance: 2.8, sameTab: true },
+      {
+        ref: pictureRefs[0],
+        label: isTouchDevice ? t.tapInteractArtwork : t.pressEOpenArtwork,
+        url: galleryContent.pictures[0].link,
+        distance: 2.2,
+        sameTab: false,
+      },
+      {
+        ref: pictureRefs[1],
+        label: isTouchDevice ? t.tapInteractArtwork : t.pressEOpenArtwork,
+        url: galleryContent.pictures[1].link,
+        distance: 2.2,
+        sameTab: false,
+      },
+      {
+        ref: pictureRefs[2],
+        label: isTouchDevice ? t.tapInteractArtwork : t.pressEOpenArtwork,
+        url: galleryContent.pictures[2].link,
+        distance: 2.2,
+        sameTab: false,
+      },
+      {
+        ref: pictureRefs[3],
+        label: isTouchDevice ? t.tapInteractArtwork : t.pressEOpenArtwork,
+        url: galleryContent.pictures[3].link,
+        distance: 2.2,
+        sameTab: false,
+      },
+      {
+        ref: doorRef,
+        label: isTouchDevice ? t.tapInteractHome : t.pressEGoHome,
+        url: PROFILE_APP_URL,
+        distance: 2.8,
+        sameTab: true,
+      },
     ],
-    []
+    [isTouchDevice, t.tapInteractArtwork, t.pressEOpenArtwork, t.tapInteractHome, t.pressEGoHome]
   );
 
   useEffect(() => {
@@ -426,11 +559,11 @@ function GalleryPage({ onBackHome }) {
   const runInteraction = useCallback(() => {
     if (!activeInteractable?.url) return;
     if (activeInteractable.sameTab) {
-      navigateTo(activeInteractable.url, onBackHome);
+      navigateTo(activeInteractable.url, onBackHome, language);
     } else {
       window.open(activeInteractable.url, "_blank", "noopener,noreferrer");
     }
-  }, [activeInteractable, onBackHome]);
+  }, [activeInteractable, onBackHome, language]);
 
   useEffect(() => {
     const onKeyDown = (event) => {
@@ -467,7 +600,8 @@ function GalleryPage({ onBackHome }) {
 
   return (
     <>
-      <div style={badgeStyle(12, 12)}>E-Galerija</div>
+      <div style={badgeStyle(12, 12)}>{t.badgeTitle}</div>
+      <LanguageToggle language={language} onToggle={onToggleLanguage} style={languageBtnStyle(12, 118)} ariaLabel={t.languageAria} />
       {!isTouchDevice && (
         <button
           type="button"
@@ -478,7 +612,7 @@ function GalleryPage({ onBackHome }) {
           }}
           style={lockBtnStyle}
         >
-          {locked ? "Unlock Pointer" : "Lock Pointer"}
+          {locked ? t.unlockPointer : t.lockPointer}
         </button>
       )}
       <button
@@ -486,7 +620,7 @@ function GalleryPage({ onBackHome }) {
         onClick={() => setViewMode((m) => (m === "first" ? "third" : "first"))}
         style={modeBtnStyle(isTouchDevice)}
       >
-        {viewMode === "first" ? "Switch to Third Person" : "Switch to First Person"}
+        {viewMode === "first" ? t.switchToThird : t.switchToFirst}
       </button>
 
       <Canvas
@@ -498,7 +632,7 @@ function GalleryPage({ onBackHome }) {
         <Physics gravity={[0, -9.81, 0]}>
           <FloorPhysics />
           <WallPhysics />
-          <Room pictureRefs={pictureRefs} doorRef={doorRef} />
+          <Room pictureRefs={pictureRefs} doorRef={doorRef} wallTitle={t.wallTitle} />
           <PlayerCamera
             onKeysChange={setPressed}
             playerPosRef={playerPosRef}
@@ -521,7 +655,7 @@ function GalleryPage({ onBackHome }) {
 
       {!isTouchDevice && <WASDOverlay pressed={pressed} />}
 
-      {!isTouchDevice && !locked && <div style={centerOverlayStyle}>Click Lock Pointer to Look Around</div>}
+      {!isTouchDevice && !locked && <div style={centerOverlayStyle}>{t.lockHint}</div>}
 
       {((!isTouchDevice && locked) || isTouchDevice) && activeInteractable && (
         <div style={interactionPromptStyle(isTouchDevice)}>{activeInteractable.label}</div>
@@ -539,6 +673,7 @@ function GalleryPage({ onBackHome }) {
 
       {isTouchDevice && (
         <MobileControls
+          t={t}
           activeInteractable={activeInteractable}
           mobileMoveInput={mobileMoveInput}
           onMoveChange={setMobileMoveInput}
@@ -553,6 +688,7 @@ function GalleryPage({ onBackHome }) {
 }
 
 function MobileControls({
+  t,
   activeInteractable,
   mobileMoveInput,
   onMoveChange,
@@ -563,7 +699,7 @@ function MobileControls({
 }) {
   return (
     <>
-      <div style={mobileHintStyle}>Left thumb: move. Right thumb: look.</div>
+      <div style={mobileHintStyle}>{t.mobileHint}</div>
       <div style={mobileHudStyle}>
         <JoystickPad value={mobileMoveInput} onChange={onMoveChange} />
         <div style={mobileActionColumnStyle}>
@@ -574,7 +710,7 @@ function MobileControls({
             onPointerCancel={() => setMobileJumpPressed(false)}
             style={mobileRoundButtonStyle(mobileJumpPressed)}
           >
-            Jump
+            {t.jump}
           </button>
           <button
             type="button"
@@ -582,7 +718,7 @@ function MobileControls({
             disabled={!activeInteractable}
             style={mobileInteractButtonStyle(Boolean(activeInteractable), touchLooking)}
           >
-            {activeInteractable ? "Interact" : "Find Target"}
+            {activeInteractable ? t.interact : t.findTarget}
           </button>
         </div>
       </div>
@@ -652,36 +788,39 @@ function JoystickPad({ value, onChange }) {
   );
 }
 
-function HomePage({ onEnterGallery }) {
+function HomePage({ onEnterGallery, language, onToggleLanguage }) {
+  const t = textByLanguage[language] ?? textByLanguage.en;
+
   return (
     <main style={homeWrapStyle}>
+      <LanguageToggle language={language} onToggle={onToggleLanguage} style={homeLanguageBtnStyle} ariaLabel={t.languageAria} />
       <section style={homeCardStyle}>
         <header style={heroHeaderStyle}>
-          <p style={eyebrowStyle}>{homeContent.role}</p>
-          <h1 style={homeTitleStyle}>{homeContent.heroTitle ?? homeContent.name}</h1>
+          <p style={eyebrowStyle}>{t.role}</p>
+          <h1 style={homeTitleStyle}>{t.heroTitle ?? homeContent.name}</h1>
           {homeContent.profileImage && (
             <a href={homeContent.profileImageLink} target="_blank" rel="noreferrer" style={profileImageLinkStyle}>
               <img src={homeContent.profileImage} alt={homeContent.name} style={profileImageStyle} />
-              <span style={profileCaptionStyle}>{homeContent.profileImageCaption}</span>
+              <span style={profileCaptionStyle}>{t.profileImageCaption}</span>
             </a>
           )}
-          <p style={homeTextStyle}>{homeContent.intro}</p>
-          <p style={homeTextStyle}>{homeContent.details}</p>
+          <p style={homeTextStyle}>{t.intro}</p>
+          <p style={homeTextStyle}>{t.details}</p>
         </header>
 
         {homeContent.aboutSections?.length > 0 && (
           <section style={projectSectionStyle}>
-            <p style={sectionTitleStyle}>About Me</p>
+            <p style={sectionTitleStyle}>{t.aboutHeading}</p>
             <article style={projectCardStyle}>
-              {homeContent.aboutSections.map((section) => (
+              {homeContent.aboutSections.map((section, index) => (
                 <div key={section.title} style={aboutBlockStyle}>
-                  <h3 style={aboutTitleStyle}>{section.title}</h3>
+                  <h3 style={aboutTitleStyle}>{index === 0 ? t.aboutPreUniTitle : index === 1 ? t.aboutUniTitle : section.title}</h3>
                   <p style={homeTextStyle}>{section.text}</p>
                 </div>
               ))}
               {homeContent.interests?.length > 0 && (
                 <>
-                  <h3 style={aboutTitleStyle}>My Interests</h3>
+                  <h3 style={aboutTitleStyle}>{t.interestsHeading}</h3>
                   <ul style={interestListStyle}>
                     {homeContent.interests.map((interest) => (
                       <li key={interest}>{interest}</li>
@@ -694,23 +833,23 @@ function HomePage({ onEnterGallery }) {
         )}
 
         <section style={projectSectionStyle}>
-          <p style={sectionTitleStyle}>Featured Project</p>
+          <p style={sectionTitleStyle}>{t.featuredHeading}</p>
           <article style={projectCardStyle}>
-            <h2 style={projectTitleStyle}>{homeContent.featuredProject.title}</h2>
-            <p style={projectSubStyle}>{homeContent.featuredProject.subtitle}</p>
-            <p style={homeTextStyle}>{homeContent.featuredProject.summary}</p>
+            <h2 style={projectTitleStyle}>{t.featuredTitle}</h2>
+            <p style={projectSubStyle}>{t.featuredSubtitle}</p>
+            <p style={homeTextStyle}>{t.featuredSummary}</p>
             <button
               type="button"
-              onClick={() => navigateTo(ROOM_APP_URL, onEnterGallery)}
+              onClick={() => navigateTo(ROOM_APP_URL, onEnterGallery, language)}
               style={primaryBtnStyle}
             >
-              {homeContent.featuredProject.cta}
+              {t.featuredCta}
             </button>
           </article>
         </section>
 
         <section style={projectSectionStyle}>
-          <p style={sectionTitleStyle}>Contact</p>
+          <p style={sectionTitleStyle}>{t.contactHeading}</p>
           <div style={homeActionsStyle}>
             <a href={`mailto:${homeContent.email}`} style={ghostLinkStyle}>
               {homeContent.email}
@@ -721,7 +860,7 @@ function HomePage({ onEnterGallery }) {
               </a>
             ))}
           </div>
-          <p style={metaTextStyle}>Location: {homeContent.location}</p>
+          <p style={metaTextStyle}>{t.locationLabel}: {homeContent.location}</p>
         </section>
       </section>
     </main>
@@ -730,11 +869,30 @@ function HomePage({ onEnterGallery }) {
 
 export default function App() {
   const [page, setPage] = useState(() => (window.location.hash === "#gallery" ? "gallery" : "home"));
+  const [language, setLanguage] = useState(() => {
+    const fromUrl = readLanguageFromUrl();
+    if (fromUrl) return fromUrl;
+    const saved = window.localStorage.getItem(LANG_STORAGE_KEY);
+    return normalizeLanguage(saved?.toLowerCase());
+  });
 
   useEffect(() => {
     const onHash = () => setPage(window.location.hash === "#gallery" ? "gallery" : "home");
     window.addEventListener("hashchange", onHash);
     return () => window.removeEventListener("hashchange", onHash);
+  }, []);
+
+  useEffect(() => {
+    window.localStorage.setItem(LANG_STORAGE_KEY, language);
+    const currentUrl = new URL(window.location.href);
+    if (currentUrl.searchParams.get("lang") !== language) {
+      currentUrl.searchParams.set("lang", language);
+      window.history.replaceState({}, "", currentUrl.toString());
+    }
+  }, [language]);
+
+  const toggleLanguage = useCallback(() => {
+    setLanguage((current) => (current === "en" ? "lt" : "en"));
   }, []);
 
   const openGallery = () => {
@@ -748,14 +906,18 @@ export default function App() {
   };
 
   if (APP_MODE === "profile") {
-    return <HomePage onEnterGallery={openGallery} />;
+    return <HomePage onEnterGallery={openGallery} language={language} onToggleLanguage={toggleLanguage} />;
   }
 
   if (APP_MODE === "room") {
-    return <GalleryPage onBackHome={openHome} />;
+    return <GalleryPage onBackHome={openHome} language={language} onToggleLanguage={toggleLanguage} />;
   }
 
-  return page === "gallery" ? <GalleryPage onBackHome={openHome} /> : <HomePage onEnterGallery={openGallery} />;
+  return page === "gallery" ? (
+    <GalleryPage onBackHome={openHome} language={language} onToggleLanguage={toggleLanguage} />
+  ) : (
+    <HomePage onEnterGallery={openGallery} language={language} onToggleLanguage={toggleLanguage} />
+  );
 }
 
 function WASDOverlay({ pressed }) {
@@ -793,6 +955,14 @@ function KeyBox({ label, active, col, row, span = 1 }) {
   );
 }
 
+function LanguageToggle({ language, onToggle, style, ariaLabel }) {
+  return (
+    <button type="button" onClick={onToggle} style={style} aria-label={ariaLabel}>
+      {language === "en" ? "LT" : "EN"}
+    </button>
+  );
+}
+
 const badgeStyle = (top, left) => ({
   position: "fixed",
   top,
@@ -805,6 +975,38 @@ const badgeStyle = (top, left) => ({
   fontFamily: "system-ui, sans-serif",
   fontSize: 13,
 });
+
+const languageBtnStyle = (top, left) => ({
+  position: "fixed",
+  top,
+  left,
+  zIndex: 31,
+  border: "1px solid rgba(148, 163, 184, 0.65)",
+  borderRadius: 8,
+  padding: "8px 12px",
+  background: "rgba(17, 24, 39, 0.92)",
+  color: "#fff",
+  fontFamily: "system-ui, sans-serif",
+  fontSize: 13,
+  fontWeight: 700,
+  cursor: "pointer",
+});
+
+const homeLanguageBtnStyle = {
+  position: "fixed",
+  top: 14,
+  right: 14,
+  zIndex: 50,
+  border: "1px solid rgba(148, 163, 184, 0.65)",
+  borderRadius: 8,
+  padding: "8px 12px",
+  background: "rgba(17, 24, 39, 0.92)",
+  color: "#fff",
+  fontFamily: "system-ui, sans-serif",
+  fontSize: 13,
+  fontWeight: 700,
+  cursor: "pointer",
+};
 
 const lockBtnStyle = {
   position: "fixed",
